@@ -1884,16 +1884,20 @@ def get_pharmacy_dashboard():
 
 # WebRTC signaling endpoints
 @app.route("/v1/webrtc/<message_type>", methods=["POST"])
-def webrtc_signaling(message_type):
-    """Handle WebRTC signaling messages"""
+def handle_webrtc_message(message_type):
+    """Handle WebRTC signaling messages (offer, answer, ice)"""
     try:
         data = request.get_json() or {}
-        appointment_id = data.get("appointmentId")
+        appointment_id = data.get("appointmentId", "").strip()
         message_data = data.get("data")
 
-        if not appointment_id or message_data is None:
-            return jsonify({"error": "appointmentId and data required"}), 400
+        if not appointment_id or not message_data:
+            return jsonify({"error": "appointmentId and data are required"}), 400
 
+        if message_type not in ['offer', 'answer', 'ice']:
+            return jsonify({"error": "Invalid message type"}), 400
+
+        # Store message for polling
         if appointment_id not in webrtc_messages:
             webrtc_messages[appointment_id] = []
 
@@ -1903,29 +1907,39 @@ def webrtc_signaling(message_type):
             "timestamp": datetime.now().isoformat()
         })
 
-        logger.info(f"WebRTC message stored: {message_type} for appointment {appointment_id}")
-        return jsonify({"success": True})
+        # Keep only last 50 messages per appointment
+        if len(webrtc_messages[appointment_id]) > 50:
+            webrtc_messages[appointment_id] = webrtc_messages[appointment_id][-50:]
+
+        logger.info(f"WebRTC {message_type} stored for appointment {appointment_id}")
+        return jsonify({"success": True, "message": f"{message_type} stored"})
 
     except Exception as e:
         logger.error(f"WebRTC signaling error: {e}")
-        return jsonify({"error": "Failed to process signaling message"}), 500
-
+        return jsonify({"error": "Failed to store signaling message"}), 500
+        
 @app.route("/v1/webrtc/poll", methods=["GET"])
-def webrtc_poll():
+def poll_webrtc_messages():
     """Poll for WebRTC signaling messages"""
     try:
-        appointment_id = request.args.get("appointmentId")
-        if not appointment_id:
-            return jsonify([])
+        appointment_id = request.args.get("appointmentId", "").strip()
 
+        if not appointment_id:
+            return jsonify({"error": "appointmentId is required"}), 400
+
+        # Get messages for this appointment
         messages = webrtc_messages.get(appointment_id, [])
-        # Return messages and clear them after sending
-        webrtc_messages[appointment_id] = []
+
+        # Remove messages after sending (to avoid duplicates)
+        if messages:
+            webrtc_messages[appointment_id] = []
+
         return jsonify(messages)
 
     except Exception as e:
-        logger.error(f"WebRTC poll error: {e}")
+        logger.error(f"WebRTC polling error: {e}")
         return jsonify({"error": "Failed to poll messages"}), 500
+
 
 
 # Scheduled tasks and cleanup
@@ -2096,6 +2110,7 @@ if __name__ == "__main__":
     # Start the Flask application
 
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+
 
 
 
