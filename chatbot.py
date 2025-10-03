@@ -86,7 +86,8 @@ CORS(app, supports_credentials=True, resources={
         "origins": [
             "http://127.0.0.1:5500",
             "http://localhost:5500",
-            "https://saharasaathi.netlify.app"
+            "https://saharasaathi.netlify.app",
+            "https://nabhasahara.netlify.app"
      
             
            
@@ -2110,6 +2111,7 @@ if __name__ == "__main__":
     # Start the Flask application
 
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+
 
 
 
